@@ -17,16 +17,17 @@
 package pearrewards.connection;
 
 import pearrewards.persistence.ConfigurationFile;
+import pearrewards.domain.User;
+import pearrewards.exception.PearRewardsException;
 
-import com.mysql.jdbc.Connection;
+import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.sql.Date;
-
+import java.text.DateFormat;
 
 /**
  *
@@ -34,18 +35,23 @@ import java.sql.Date;
  */
 class ConnectionMySQL implements IConnection {
     
-    private Connection connection;
     private String username;
     private String password;
     private String url;
 
-    public ConnectionMySQL(ConfigurationFile config) throws ClassNotFoundException {
-        Class.forName("com.mysql.jdbc.Driver");
+    public ConnectionMySQL(ConfigurationFile config) throws PearRewardsException {
+        try {
+            Class.forName("com.mysql.jdbc.Driver");
+
+            this.username = config.getConfig().getString("connect_db.mysql.username");
+            this.password = config.getConfig().getString("connect_db.mysql.password");
+            this.url = "jdbc:mysql://localhost:3306/" + 
+                    config.getConfig().getString("connect_db.mysql.database");
+        } catch(ClassNotFoundException ex) {
+            throw new PearRewardsException("[Error] PearRewards: Driver not found!");
+        }
         
-        this.username = config.getConfig().getString("connect_db.mysql.username");
-        this.password = config.getConfig().getString("connect_db.mysql.password");
-        this.url = "jdbc:mysql://localhost:3306/" + 
-                config.getConfig().getString("connect_db.mysql.database");
+        checkTableExist();
     }
     
     // GETTER E SETTER //
@@ -74,185 +80,104 @@ class ConnectionMySQL implements IConnection {
         this.url = url;
     }
     
-    public Connection getConnection() {
-        return connection;
-    }
-    
     // PRENDO TABELLA DB //
     
-    @Override
-    public void checkDBexist() throws SQLException {
+    private Connection openConnection() throws PearRewardsException {
+        try {
+            return DriverManager.getConnection(url, username, password);
+        } catch(SQLException ex) {
+            throw new PearRewardsException("[Error] PearRewards: Can't open a connection: " + ex.getMessage());
+        }
+    }
+    
+    private void closeConnection(Connection conn) throws PearRewardsException { 
+        try {
+            conn.close();
+        } catch(SQLException ex) {
+            throw new PearRewardsException("[Error] PearRewards: Can't close a connection: " + ex.getMessage());
+        }
+    }
+    
+    private void checkTableExist() throws PearRewardsException {
+        Connection conn = null;
+        
+        try {
+            conn = DriverManager.getConnection(url, username, password);
+            String sql = "CREATE TABLE IF NOT EXIST PearRewards(ID int NOT NULL AUTO_INCREMENT, " +
+                    "Username varchar(20) NOT NULL, Date DATE, NumRewards int NOT NULL, " + 
+                    "ReedemRewards int NOT NULL, PRIMARY KEY(ID);";
+            conn.createStatement().execute(sql);
+        } catch(SQLException ex) {
+            throw new PearRewardsException("[Error] PearRewards: Can't create the table: " + ex.getMessage());
+        } finally {
+            closeConnection(conn);
+        }
+    }
+    
+    public void createUser(String username) throws PearRewardsException { // Aggiungere eccezione personalizzata
+        Connection conn = null;
+        
+        try {
+            conn = openConnection();
+        } catch(PearRewardsException ex) {
+            throw new PearRewardsException(ex.getMessage());
+        }
 
-        connection = (Connection)DriverManager.getConnection(url, username, password);
-        String sql = "CREATE TABLE IF NOT EXISTS PearRewards(ID int NOT NULL AUTO_INCREMENT, "
-                + "Username varchar(20) NOT NULL, Date DATE, NumRewards int NOT NULL, "
-                + "ReedemRewards int NOT NULL, PRIMARY KEY (ID))";
-                
-        PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.executeUpdate();
-    }
-    
-    @Override
-    public boolean checkUserExist(String username) throws SQLException{
-        String sql = "SELECT ID FROM PearRewards WHERE Username = ?";
-        PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.setString(1, username);
-        
-        ResultSet res = stmt.executeQuery();
-        return res.next();
-    }
-    
-    @Override
-    public void createUser(String username) throws SQLException {
-        
-        LocalDate date = LocalDate.now();
-        
-        String sql = "INSERT INTO PearRewards (Username, Date, NumRewards, ReedemRewards) VALUES (?, ?, 1, 0)";        
-        PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.setString(1, username);
-        stmt.setString(2, date.format(DateTimeFormatter.ISO_LOCAL_DATE));
-        
-        stmt.executeUpdate();                
-    }
-    
-    @Override
-    public Date getUserDate(String username) throws SQLException {
-                
-        String sql = "SELECT Date FROM PearRewards WHERE Username = ?";
-        PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.setString(1, username);
-        
-        ResultSet res = stmt.executeQuery();
-        if(res.next()) {
-            return res.getDate("Date");
-        } else {
-            throw new SQLException();
-        }    
-    }
-    
-    @Override
-    public boolean updateDate(String username) {
+        String sql = "INSERT INTO PearRewards (Username, Date, NumRewards, ReedemRewards) VALUES (?, ?, 1, 0)";
         
         try {
-                String sql = "UPDATE PearRewards SET Date = ? WHERE Username = ?";
-                PreparedStatement stmt = connection.prepareStatement(sql);
-                stmt.setString(1, LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE));
-                stmt.setString(2, username);
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            stmt.setString(1, username);
+            stmt.setString(2, LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE));
+            
+            conn.createStatement().execute(sql);
+        } catch(SQLException ex) {
+            throw new PearRewardsException("[Error] PearRewards: Can't insert the user: " + ex.getMessage());
+        } finally {
+            closeConnection(conn);
+        }
 
-                stmt.executeUpdate();
-                return true;
-        } catch(SQLException ex) {
-            System.err.println("[PearRewards] Error: " + ex.getMessage());
-            return false;
-        }
-        
     }
     
-    @Override
-    public int getNumRewards(String username) {
-        
-        try { 
-            String sql = "SELECT NumRewards FROM PearRewards WHERE Username = ?";
-            PreparedStatement stmt = connection.prepareStatement(sql);
-            stmt.setString(1, username);
-            
-            ResultSet res = stmt.executeQuery();
-            
-            if(res.next()) {
-                return res.getInt("NumRewards");
-            } else {
-                System.err.println("[PearRewards] Error while taking NumRewards");
-                return 1;
-            }        
-            
-        } catch(SQLException ex) {
-            System.err.println("[PearRewards] Error: " + ex.getMessage());
-            return 1;
-        }
-        
-    }
-    
-    @Override
-    public void incrementNumRewards(String username) {
+    public User readUser(String username) throws PearRewardsException {
+        Connection conn = null;
         
         try {
-            String sql = "UPDATE PearRewards SET NumRewards = NumRewards+1 WHERE Username = ?";
-            PreparedStatement stmt = connection.prepareStatement(sql);
-            stmt.setString(1, username);
+            String sql = "SELECT * FROM PearRewards WHERE Username = " + username;
+            conn = openConnection();
             
-            stmt.executeUpdate();
+            ResultSet result = conn.createStatement().executeQuery(sql);
+            
+            result.first();
+            if(result.getRow() == 0) throw new PearRewardsException("[Error] PearRewards: Can't get information about the user!");
+            
+            return new User(
+                    username,
+                    result.getDate("date"),
+                    result.getInt("NumRewards"),
+                    result.getInt("ReedemRewards")
+            );
         } catch(SQLException ex) {
-            System.err.println("[PearRewards] Error: " + ex.getMessage());
+            throw new PearRewardsException("[Error] PearRewards: Error with SQL syntax: " + ex.getMessage());
+        } finally {
+            closeConnection(conn);
         }
-        
     }
     
-    @Override
-    public void resetNumRewards(String username) {
+    public void updateUser(User user) throws PearRewardsException {
+        Connection conn = null;
         
         try {
-            String sql = "UPDATE PearRewards SET NumRewards = 1 WHERE Username = ?";
-            PreparedStatement stmt = connection.prepareStatement(sql);
-            stmt.setString(1, username);
+            String sql = "UPDATE PearRewards Date = '" + DateFormat.getDateInstance().format(user.getDate()) + "', " + 
+                    "NumRewards = " + user.getNumRewards() + ", ReedemRewards = " + user.getReedemRewards() + 
+                    " WHERE Username = " + user.getUsername() + ";";
             
-            stmt.executeUpdate();
+            conn = openConnection();
+            if(conn.createStatement().executeUpdate(sql) != 1) throw new PearRewardsException("[Error] PearRewards: Can't update information about the user!");
         } catch(SQLException ex) {
-            System.err.println("[PearRewards] Error: " + ex.getMessage());
+            throw new PearRewardsException("[Error] PearRewards: Error with SQL syntax: " + ex.getMessage());
+        } finally {
+            closeConnection(conn);
         }
-        
     }
-    
-    @Override
-    public void incrementReedemRewards(String username) {
-        
-        try {
-            String sql = "UPDATE PearRewards SET ReedemRewards = ? WHERE Username = ?";
-            PreparedStatement stmt = connection.prepareStatement(sql);
-            stmt.setInt(1, getNumRewards(username));
-            stmt.setString(2, username);
-            
-            stmt.executeUpdate();
-        } catch(SQLException ex) {
-            System.err.println("[PearRewards] Error: " + ex.getMessage());
-        }
-        
-    }
-    
-    @Override
-    public void resetReedemRewards(String username) {
-        
-        try {
-            String sql = "UPDATE PearRewards SET ReedemRewards = 0 WHERE Username = ?";
-            PreparedStatement stmt = connection.prepareStatement(sql);
-            stmt.setString(1, username);
-            
-            stmt.executeUpdate();
-        } catch(SQLException ex) {
-            System.err.println("[PearRewards] Error: " + ex.getMessage());
-        }
-        
-    }
-    
-    @Override
-    public int getReedemRewards(String username) {
-        
-        try { 
-            String sql = "SELECT ReedemRewards FROM PearRewards WHERE Username = ?";
-            PreparedStatement stmt = connection.prepareStatement(sql);
-            stmt.setString(1, username);
-            
-            ResultSet res = stmt.executeQuery();
-            if(res.next()) {
-                return res.getInt("ReedemRewards");
-            } else {
-                System.err.println("[PearRewards] Error while taking NumRewards");
-                return 1;
-            }  
-        } catch(SQLException ex) {
-            System.err.println("[PearRewards] Error: " + ex.getMessage());
-            return 1;
-        }
-        
-    }
-    
 }
