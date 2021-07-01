@@ -16,6 +16,7 @@
  */
 package pearrewards.connection;
 
+import pearrewards.exception.PearRewardsException;
 import pearrewards.persistence.ConfigurationFile;
 
 /**
@@ -24,7 +25,7 @@ import pearrewards.persistence.ConfigurationFile;
  */
 public class ConnectionDispatcher {
     
-    public static IConnection getDB(ConfigurationFile config) throws ClassNotFoundException {
+    public static IConnection getDB(ConfigurationFile config) throws ClassNotFoundException, PearRewardsException {
         
         String type = config.getConfig().getString("db_type");
         
@@ -32,9 +33,9 @@ public class ConnectionDispatcher {
             case "mysql":
                 System.out.println("[PearRewards] Creating mysql database.");
                 return new ConnectionMySQL(config);
-            case "sqlite":
+            /*case "sqlite":
                 System.out.println("[PearRewards] Creating sqlite database.");
-                return new ConnectionSQLite(config);
+                return new ConnectionSQLite(config);*/
             default:
                 System.err.println("[PearRewards] The type \"" + type + "\" it's invalid. Check the file config.yml");
                 System.err.println("[PearRewards] Creating sqlite database.");

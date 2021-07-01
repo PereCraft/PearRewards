@@ -16,6 +16,9 @@
  */
 package pearrewards.service;
 
+import java.time.LocalDate;
+import java.time.Period;
+import pearrewards.PearRewards;
 import pearrewards.control.ServiceManager;
 
 import org.bukkit.Bukkit;
@@ -29,6 +32,8 @@ import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.ComponentBuilder;
 import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
+import pearrewards.domain.User;
+import pearrewards.exception.PearRewardsException;
 
 /**
  *
@@ -40,57 +45,84 @@ public class ListenerEvent implements Listener {
     
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
-        Player p = e.getPlayer();
-        String username = p.getName();
         
-        if((sm.checkData(username) == 1) && (sm.getReedemRewards(username) == sm.getNumRewards(username))) {
+        Bukkit.getScheduler().runTaskLater(PearRewards.getPlugin(), () -> {
             
-            if(sm.getNumRewards(username) == sm.getDailyElements().size())
-                sm.resetRewards(username);
-            else
-                sm.incrementNumRewards(username);
+            Player p = e.getPlayer();
+            String username = p.getName();
             
-        } else if((sm.checkData(username) > 1) || (sm.getReedemRewards(username) != sm.getNumRewards(username))) {
-            sm.resetRewards(username);
-        }
-        
-        sm.updateDate(username);
-        
-        if(sm.getReedemRewards(username) != sm.getNumRewards(username))
-            
-        	p.spigot().sendMessage(new ComponentBuilder(sm.getConfig().getString("notify_message").replaceAll("&", "§"))
+            try {
+                User user = sm.readUser(username);
+                int period = Period.between(LocalDate.parse(user.getDate().toString()), LocalDate.now()).getDays();
+                
+                if((period == 1) && (user.getReedemRewards() == user.getNumRewards())) {
+                    if(user.getNumRewards() == sm.getDailyElements().size()) {
+                        user.setReedemRewards(0);
+                        user.setNumRewards(1);
+                        
+                        sm.updateUser(user);
+                    } else {
+                        user.setNumRewards(user.getNumRewards()+1);
+                        sm.updateUser(user);
+                    }
+                } else if((period > 1) || (user.getReedemRewards() != user.getNumRewards())) {
+                    user.setReedemRewards(0);
+                    user.setNumRewards(1);
+                        
+                    sm.updateUser(user);
+                }
+                
+                if(user.getReedemRewards() != user.getNumRewards()) {
+                    p.spigot().sendMessage(new ComponentBuilder(sm.getConfig().getString("notify_message").replaceAll("&", "§"))
         			.event(new HoverEvent(HoverEvent.Action.SHOW_TEXT, TextComponent.fromLegacyText("§aRiscatta reward!")))
         			.event(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/daily"))
         			.create()
-        	);
-        	
+                    );
+                }
+                
+            } catch(PearRewardsException ex) {
+                System.out.println("sas");
+            }
+            
+        }, 40);        	
     }
     
     @EventHandler
     public void onClick(InventoryClickEvent e) {
         
-        if(e.getCurrentItem() == null)
+        if(e.getCurrentItem() == null) 
             return;
         
         if(e.getView().getTitle().equals("§l§aPearRewards")) {
-            if(e.getCurrentItem().getItemMeta().isUnbreakable()) {
-                Player p = (Player)e.getWhoClicked();
-                int giorno = sm.getNumRewards(p.getName()) - 1;
+            if(e.getCurrentItem().getItemMeta().isUnbreakable()) { 
+                String username = ((Player)e.getWhoClicked()).getName();
                 
-                Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), 
-                        getGiveCommand(
-                                sm.getDailyElements().get(giorno).getString("give_command"),
-                                p.getName()
-                        )
-                );
-                
-                p.closeInventory();
-                sm.updateReedemRewards(p.getName());
-                
-            } 
-        
-            e.setCancelled(true);
+                //TODO: Continuare
+            }
         }
+        
+//        if(e.getCurrentItem() == null)
+//            return;
+//        
+//        if(e.getView().getTitle().equals("§l§aPearRewards")) {
+//            if(e.getCurrentItem().getItemMeta().isUnbreakable()) {
+//                Player p = (Player)e.getWhoClicked();
+//                int giorno = sm.getNumRewards(p.getName()) - 1;
+//                
+//                Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), 
+//                        getGiveCommand(
+//                                sm.getDailyElements().get(giorno).getString("give_command"),
+//                                p.getName()
+//                        )
+//                );
+//                
+//                p.closeInventory();
+//                sm.updateReedemRewards(p.getName());
+//                
+//            } 
+//        
+//            e.setCancelled(true);
+//        }
     }
     
     private String getGiveCommand(String command, String username) {

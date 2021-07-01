@@ -16,7 +16,7 @@
  */
 package pearrewards.connection;
 
-import java.sql.Connection;
+import pearrewards.domain.User;
 import pearrewards.exception.PearRewardsException;
 
 /**
@@ -25,6 +25,8 @@ import pearrewards.exception.PearRewardsException;
  */
 public interface IConnection {
     
-    private Connection openConnection() throws PearRewardsException;
-    
+    public void createUser(String username) throws PearRewardsException;
+    public User readUser(String username) throws PearRewardsException;
+    public void updateUser(User user) throws PearRewardsException;
+
 }

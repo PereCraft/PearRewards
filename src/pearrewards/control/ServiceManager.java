@@ -31,6 +31,8 @@ import java.util.List;
 
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import pearrewards.domain.User;
+import pearrewards.exception.PearRewardsException;
 
 
 /**
@@ -64,8 +66,6 @@ public class ServiceManager {
         // listener init
         this.listener.setServiceManager(this);
         
-        // db connection 
-        this.connection.checkDBexist();
     }
     
     public static ServiceManager getServiceManager(PearRewards plugin, Commands commands, ListenerEvent listener, ConfigurationFile config) throws Exception, ClassNotFoundException, SQLException {
@@ -121,62 +121,16 @@ public class ServiceManager {
         return config.getDailyElements();
     }
     
-    public int checkData(String username) {
-        
-        try {
-            if(!connection.checkUserExist(username)) {
-                connection.createUser(username);
-                return 0;
-            } else {
-                
-                LocalDate dateSQL = LocalDate.parse(connection.getUserDate(username).toString());
-                LocalDate dateCurrent = LocalDate.now();
-
-                return Period.between(dateSQL, dateCurrent).getDays();
-            }
-            
-        } catch(SQLException ex) {
-            System.err.println("Error: " + ex.getMessage());
-            return -1;
-        }
-        
+    public void createUser(String username) throws PearRewardsException {
+        connection.createUser(username);        
     }
     
-    public Date getUserDate(String username) throws SQLException {
-        
-        try {
-            return connection.getUserDate(username);
-        } catch(SQLException ex) {
-            System.err.println("[PearRewards] Error: " + ex.getMessage());
-            plugin.onDisable();
-            throw new SQLException();
-        }
-        
+    public User readUser(String username) throws PearRewardsException {
+        return connection.readUser(username);
     }
     
-    public boolean updateDate(String username) {
-        return connection.updateDate(username);
-    }
-    
-    public void incrementNumRewards(String username) {
-        connection.incrementNumRewards(username);
-    }
-    
-    public void resetRewards(String username) {
-        connection.resetNumRewards(username);
-        connection.resetReedemRewards(username);
-    }
-    
-    public int getNumRewards(String username) {
-        return connection.getNumRewards(username);
-    }
-    
-    public void updateReedemRewards(String username) {
-        connection.incrementReedemRewards(username);
-    }
-    
-    public int getReedemRewards(String username) {
-        return connection.getReedemRewards(username);
+    public void updateUser(User user) throws PearRewardsException {
+        connection.updateUser(user);
     }
     
 }

@@ -114,6 +114,7 @@ class ConnectionMySQL implements IConnection {
         }
     }
     
+    @Override
     public void createUser(String username) throws PearRewardsException { // Aggiungere eccezione personalizzata
         Connection conn = null;
         
@@ -139,6 +140,7 @@ class ConnectionMySQL implements IConnection {
 
     }
     
+    @Override
     public User readUser(String username) throws PearRewardsException {
         Connection conn = null;
         
@@ -164,6 +166,7 @@ class ConnectionMySQL implements IConnection {
         }
     }
     
+    @Override
     public void updateUser(User user) throws PearRewardsException {
         Connection conn = null;
         
